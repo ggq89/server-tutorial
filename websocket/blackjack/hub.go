@@ -36,28 +36,40 @@ func (h *Hub) run() {
 	for {
 		select {
 		case client := <- h.register:
-			h.clients[client] = true
-			if len(h.clients) == 0 {
-				client.isRoomOwner = true
-			}
-		case client := <- h.unregister:
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				close(client.send)
-			}
+			h.registerClient(client)
+		case client := <-h.unregister:
+			h.unregisterClient(client)
 		case message := <-h.broadcast:
-			// if message is from room owner and start is the
-			// message given, when the room status is not started,
-			// start the game
-			for client := range h.clients {
-				select {
-				case client.send <- message:
-				default:
-					close(client.send)
-					delete(h.clients, client)
-				}
-			}
+			h.broadcastMsg(message)
 		}
+	}
+}
+
+func (h *Hub) broadcastMsg(message []byte) {
+	// if message is from room owner and start is the
+	// message given, when the room status is not started,
+	// start the game
+	for client := range h.clients {
+		select {
+		case client.send <- message:
+		default:
+			close(client.send)
+			delete(h.clients, client)
+		}
+	}
+}
+
+func (h *Hub) registerClient(client *Client) {
+	h.clients[client] = true
+	if len(h.clients) == 0 {
+		client.isRoomOwner = true
+	}
+}
+
+func (h *Hub) unregisterClient(client *Client) {
+	if _, ok := h.clients[client]; ok {
+		delete(h.clients, client)
+		close(client.send)
 	}
 }
 
