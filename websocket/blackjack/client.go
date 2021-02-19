@@ -91,27 +91,7 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if !ok {
-				// The hub closed the channel.
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
-
-			w, err := c.conn.NextWriter(websocket.TextMessage)
-			if err != nil {
-				return
-			}
-			w.Write(message)
-
-			// Add queued chat messages to the current websocket message.
-			n := len(c.send)
-			for i := 0; i < n; i++ {
-				w.Write(newline)
-				w.Write(<-c.send)
-			}
-
-			if err := w.Close(); err != nil {
+			if c.dequeMsg(ok, message) {
 				return
 			}
 		case <-ticker.C:
@@ -123,6 +103,33 @@ func (c *Client) writePump() {
 	}
 }
 
+func (c *Client) dequeMsg (ok bool, message []byte) bool {
+	c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+	if !ok {
+		// The hub closed the channel.
+		c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+		return true
+	}
+
+	w, err := c.conn.NextWriter(websocket.TextMessage)
+	if err != nil {
+		return true
+	}
+	w.Write(message)
+
+	// Add queued chat messages to the current websocket message.
+	n := len(c.send)
+	for i := 0; i < n; i++ {
+		w.Write(newline)
+		w.Write(<-c.send)
+	}
+
+	if err := w.Close(); err != nil {
+		return true
+	}
+	return false
+}
+
 // serveWs handles websocket requests from the peer.
 func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -131,6 +138,9 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), isRoomOwner: false}
+	if len(hub.clients) == 0 {
+		client.isRoomOwner = true
+	}
 	client.hub.register <- client
 
 	// Allow collection of memory referenced by the caller by doing all work in

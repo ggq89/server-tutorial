@@ -68,7 +68,18 @@ func (h *Hub) registerClient(client *Client) {
 
 func (h *Hub) unregisterClient(client *Client) {
 	if _, ok := h.clients[client]; ok {
+
 		delete(h.clients, client)
+
+		if client.isRoomOwner {
+			for c, _ := range h.clients {
+				if c != client {
+					c.isRoomOwner = true
+					break
+				}
+			}
+		}
+
 		close(client.send)
 	}
 }

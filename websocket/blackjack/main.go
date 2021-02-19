@@ -39,20 +39,41 @@ func main() {
 }
 
 func handleWs(w http.ResponseWriter, r * http.Request, h *[]*Hub) {
-	notAdded := true
+	removeEmptyHubs(h)
+	success := assignExistingHub(w, r, h)
+	if !success {
+		assignNewHub(w, r, h)
+	}
+}
+
+func assignNewHub(w http.ResponseWriter, r *http.Request, h *[]*Hub) {
+	hub := newHub()
+	*h = append(*h, hub)
+
+	go hub.run()
+	serveWs(hub, w, r)
+}
+
+func assignExistingHub(w http.ResponseWriter, r *http.Request, h *[]*Hub) bool {
+	assigned := false
 	for _, hub := range *h {
 		if !hub.started && len(hub.clients) < 5 {
 			serveWs(hub, w, r)
-			notAdded = false
+			assigned = true
 			break
 		}
 	}
+	return assigned
+}
 
-	if notAdded {
-		hub := newHub()
-		*h = append(*h, hub)
+func removeEmptyHubs(h *[]*Hub) {
+	nextHub := make([]*Hub, 0)
+	for _, hub := range *h {
+		if len(hub.clients) == 0 {
+			continue
+		}
 
-		go hub.run()
-		serveWs(hub, w, r)
+		nextHub = append(nextHub, hub)
 	}
+	h = &nextHub
 }
