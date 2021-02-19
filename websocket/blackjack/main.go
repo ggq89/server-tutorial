@@ -41,6 +41,7 @@ func main() {
 func handleWs(w http.ResponseWriter, r * http.Request, h *[]*Hub) {
 	removeEmptyHubs(h)
 	success := assignExistingHub(w, r, h)
+
 	if !success {
 		assignNewHub(w, r, h)
 	}

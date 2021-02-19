@@ -4,14 +4,13 @@
 
 package main
 
+import "strconv"
+
 // Hub maintains the set of active clients and broadcasts messages to the
 // clients.
 type Hub struct {
 	// Registered clients.
 	clients map[*Client]bool
-
-	// Inbound messages from the clients.
-	broadcast chan []byte
 
 	// Register requests from the clients.
 	register chan *Client
@@ -20,15 +19,22 @@ type Hub struct {
 	unregister chan *Client
 
 	started	bool
+
+	broadcast chan ClientMsg
+}
+
+type ClientMsg struct {
+	client	*Client
+	msg		[]byte
 }
 
 func newHub() *Hub {
 	return &Hub {
-		broadcast:	make(chan []byte),
-		register:	make(chan *Client),
-		unregister:	make(chan *Client),
-		clients:	make(map[*Client]bool),
-		started:	false,
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
+		clients:    make(map[*Client]bool),
+		started:    false,
+		broadcast:  make(chan ClientMsg),
 	}
 }
 
@@ -39,22 +45,8 @@ func (h *Hub) run() {
 			h.registerClient(client)
 		case client := <-h.unregister:
 			h.unregisterClient(client)
-		case message := <-h.broadcast:
-			h.broadcastMsg(message)
-		}
-	}
-}
-
-func (h *Hub) broadcastMsg(message []byte) {
-	// if message is from room owner and start is the
-	// message given, when the room status is not started,
-	// start the game
-	for client := range h.clients {
-		select {
-		case client.send <- message:
-		default:
-			close(client.send)
-			delete(h.clients, client)
+		case clmsg := <-h.broadcast:
+			h.broadcastMsg(clmsg)
 		}
 	}
 }
@@ -81,6 +73,26 @@ func (h *Hub) unregisterClient(client *Client) {
 		}
 
 		close(client.send)
+	}
+}
+
+func (h *Hub) broadcastMsg(clmsg ClientMsg) {
+	// if message is from room owner and start is the
+	// message given, when the room status is not started,
+	// start the game
+	cl, message := clmsg.client, clmsg.msg
+
+	for client := range h.clients {
+		select {
+		case client.send <- []byte("Client " + strconv.Itoa(cl.clientNo) + ")"):
+			if cl.isRoomOwner {
+				client.send <- []byte("<<message from roomOwner>>")
+			}
+			client.send <- message
+		default:
+			close(client.send)
+			delete(h.clients, client)
+		}
 	}
 }
 

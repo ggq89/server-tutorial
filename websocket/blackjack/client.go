@@ -49,6 +49,9 @@ type Client struct {
 
 	// isRoomOwner
 	isRoomOwner bool
+
+	// clientNo
+	clientNo int
 }
 
 // readPump pumps messages from the websocket connection to the hub.
@@ -73,7 +76,7 @@ func (c *Client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		c.hub.broadcast <- message
+		c.hub.broadcast <- ClientMsg{client: c, msg: message}
 	}
 }
 
@@ -141,10 +144,28 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	if len(hub.clients) == 0 {
 		client.isRoomOwner = true
 	}
+	assignClientNo(hub, client)
 	client.hub.register <- client
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
 	go client.writePump()
 	go client.readPump()
+}
+
+func assignClientNo(hub *Hub, client *Client) {
+	nums := make(map[int]bool)
+	for i := 0; i < 5; i++ {
+		nums[i] = true
+	}
+	for c, _ := range hub.clients {
+		nums[c.clientNo] = false
+	}
+
+	for i := 0; i < 5; i++ {
+		if nums[i] {
+			client.clientNo = i
+			break
+		}
+	}
 }
