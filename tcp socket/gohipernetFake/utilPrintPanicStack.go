@@ -8,6 +8,12 @@ import (
 )
 
 func PrintPanicStack(extras ...interface{}) {
+	defer func() {
+		if x := recover(); x != nil {
+			Logger.Error(fmt.Sprintf("caught panic in PrintPanicStack(): %+v", x))
+		}
+	}()
+		
 	if x := recover(); x != nil {
 		Logger.Error(fmt.Sprintf("%v", x))
 
